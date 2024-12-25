@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import re
+import json # Importar json
 
 class RenderQueueController:
     def __init__(self, model, view):
@@ -21,7 +23,8 @@ class RenderQueueController:
 
     def add_to_queue(self, index):
         settings = self.get_settings()
-        self.model.add_to_queue(index, settings)
+        if self.validate_settings(settings):  # Validar configuraciones antes de agregar a la cola
+            self.model.add_to_queue(index, settings)
 
     def remove_from_queue(self, index):
         self.model.remove_from_queue(index)
@@ -40,9 +43,40 @@ class RenderQueueController:
             "file_prefix": self.view.file_prefix_var.get(),
             "render_engine": self.view.render_engine_var.get(),
             "render_threads": self.view.render_threads_var.get(),
-            "shutdown_after_render": self.view.shutdown_var.get(),  # Obtener estado de la casilla de verificación
-            "suspend_after_render": self.view.suspend_var.get(),  # Obtener estado de la casilla de verificación
+            "shutdown_after_render": self.view.shutdown_var.get(),
+            "suspend_after_render": self.view.suspend_var.get(),
         }
+
+    def validate_settings(self, settings):
+        # Validar resolución usando una expresión regular
+        resolution_pattern = re.compile(r'^\d+x\d+$')
+        if not resolution_pattern.match(settings["resolution"]):
+            messagebox.showerror("Error", "Invalid resolution format. Please use format like '1920x1080'.")
+            return False
+
+        # Validar frames
+        try:
+            start_frame = int(settings["start_frame"])
+            end_frame = int(settings["end_frame"])
+            if start_frame < 0 or end_frame < 0 or start_frame > end_frame:
+                 messagebox.showerror("Error", "Invalid frame range. Start and end frames must be positive integers, and the start frame must be less than or equal to the end frame.")
+                 return False
+        except ValueError:
+            messagebox.showerror("Error", "Invalid frame values. Please enter integers for start and end frames.")
+            return False
+
+        # Validar la ruta de salida
+        if not settings["output_path"]:
+            messagebox.showerror("Error", "Output path cannot be empty.")
+            return False
+
+        # Validar que el numero de hilos sea Auto o un numero
+        threads_pattern = re.compile(r'^(Auto|\d+)$', re.IGNORECASE)
+        if not threads_pattern.match(settings["render_threads"]):
+            messagebox.showerror("Error", "Invalid number of threads, must be 'Auto' or a number")
+            return False
+
+        return True
 
     def start_render(self, selected_queue):
         print("Controller start_render called")
@@ -51,6 +85,30 @@ class RenderQueueController:
     def stop_render(self):
         print("Controller stop_render called")
         self.model.stop_render()
+        
+    def save_config(self):
+        file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
+        if file_path:
+            config_data = self.model.to_dict()
+            try:
+                 with open(file_path, "w") as f:
+                    json.dump(config_data, f, indent=4)
+                 messagebox.showinfo("Config Saved", "Configuration saved successfully.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Error saving configuration: {e}")
+
+    def load_config(self):
+        file_path = filedialog.askopenfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
+        if file_path:
+            try:
+                with open(file_path, "r") as f:
+                   config_data = json.load(f)
+                
+                self.model.from_dict(config_data)
+                messagebox.showinfo("Config Loaded", "Configuration loaded successfully.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Error loading configuration: {e}")
+    
 
     def set_shutdown_after_render(self):
         self.model.shutdown_after_render = self.view.shutdown_var.get()

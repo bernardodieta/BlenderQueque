@@ -3,6 +3,7 @@ import subprocess
 import platform
 import re
 from threading import Thread, Event
+import json # Importar json
 
 class RenderQueueModel:
     def __init__(self):
@@ -158,8 +159,16 @@ class RenderQueueModel:
 
                 self.current_process = None
 
+            except FileNotFoundError:
+                self.notify_observers("error", f"Blender executable not found. Please make sure Blender is installed and accessible in your system path.")
+            except subprocess.CalledProcessError as e:
+                 if self.stop_event.is_set():
+                      print("Rendering stopped by user during an error")
+                      self.notify_observers("error", f"Rendering stopped by user during an error: {e.stderr}")
+                      return
+                 self.notify_observers("error", f"Error rendering {blend_file}:\n{e.stderr}")
             except Exception as e:
-                self.notify_observers("error", f"An error occurred: {e}")
+                self.notify_observers("error", f"An unexpected error occurred: {e}")
                 return
 
         self.is_rendering = False
@@ -228,3 +237,21 @@ class RenderQueueModel:
         except Exception as e:
             self.notify_observers("error", f"An error occurred while retrieving cameras: {e}")
             return []
+
+    def to_dict(self):
+        return {
+            "loaded_files": self.loaded_files,
+            "queue": self.queue,
+            "shutdown_after_render": self.shutdown_after_render,
+            "suspend_after_render": self.suspend_after_render,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+         model = cls()
+         model.loaded_files = data.get("loaded_files", [])
+         model.queue = data.get("queue", [])
+         model.shutdown_after_render = data.get("shutdown_after_render", False)
+         model.suspend_after_render = data.get("suspend_after_render", False)
+         model.notify_observers()
+         return model

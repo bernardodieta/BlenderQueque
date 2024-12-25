@@ -181,6 +181,16 @@ class RenderQueueView:
 
         self.remove_from_queue_button = ttk.Button(queue_button_frame, text="Remove from Queue", command=self.remove_from_render_queue, style='TRounded.TButton')
         self.remove_from_queue_button.pack(side="left", padx=5)
+        
+        # Botones para Guardar y Cargar la configuracion
+        config_button_frame = tk.Frame(self.root, bg=self.bg_color)
+        config_button_frame.grid(row=2, column=1, sticky="ew", padx=10, pady=(0, 10))
+
+        self.save_config_button = ttk.Button(config_button_frame, text="Save Config", command=self.save_config, style='TRounded.TButton')
+        self.save_config_button.pack(side="left", padx=5)
+
+        self.load_config_button = ttk.Button(config_button_frame, text="Load Config", command=self.load_config, style='TRounded.TButton')
+        self.load_config_button.pack(side="left", padx=5)
 
         # Botones para iniciar y detener renderizado
         self.start_button = ttk.Button(self.root, text="Start Render", command=self.start_render, style='TRounded.TButton')
@@ -365,6 +375,10 @@ class RenderQueueView:
             index = self.loaded_files_tree.index(item_id)
             self.controller.add_to_queue(index)
 
+        self.selected_loaded_files.clear()  # Limpiar la lista después de añadir a la cola
+        for item in self.loaded_files_tree.get_children():
+            self.loaded_files_tree.item(item, tags=[])  # Quitar el tag "selected" de los items
+
     def remove_from_render_queue(self):
         selected_items = list(self.selected_items)
         for item_id in selected_items:
@@ -392,15 +406,17 @@ class RenderQueueView:
     def stop_render(self):
         print("Stop Render button clicked")
         self.controller.stop_render()
+        
+    def save_config(self):
+        self.controller.save_config()
+        
+    def load_config(self):
+        self.controller.load_config()
 
     def update_loaded_files_tree(self, loaded_files):
         self.loaded_files_tree.delete(*self.loaded_files_tree.get_children())
         for item in loaded_files:
             self.loaded_files_tree.insert("", tk.END, values=(os.path.basename(item["file"]),))
-
-        for item_id in self.selected_loaded_files:
-            if item_id in self.loaded_files_tree.get_children():
-                self.loaded_files_tree.item(item_id, tags=["selected"])
 
     def update_queue_tree(self, queue):
         self.queue_tree.delete(*self.queue_tree.get_children())
@@ -420,10 +436,6 @@ class RenderQueueView:
                     f"{progress}%",
                 ),
             )
-
-        for item_id in self.selected_items:
-            if item_id in self.queue_tree.get_children():
-                self.queue_tree.item(item_id, tags=["selected"])
 
     def update_progress_bar(self, index, progress):
         item_id = self.queue_tree.get_children()[index]
@@ -477,19 +489,19 @@ class RenderQueueView:
             self.update_settings_from_loaded_files(index)
 
     def add_placeholder_to(self, entry, placeholder):
-            padded_placeholder = "  " + placeholder + "  "  # Añadimos dos espacios a cada lado
-            entry.insert(0, padded_placeholder)
-            entry.config(foreground='grey')
+        padded_placeholder = "  " + placeholder + "  "  # Añadimos dos espacios a cada lado
+        entry.insert(0, padded_placeholder)
+        entry.config(foreground='grey')
 
-            def focus_in(_):
-                if entry.get() == padded_placeholder:
-                    entry.delete(0, tk.END)
-                    entry.config(foreground=self.entry_fg_color)
+        def focus_in(_):
+            if entry.get() == padded_placeholder:
+                entry.delete(0, tk.END)
+                entry.config(foreground=self.entry_fg_color)
 
-            def focus_out(_):
-                if not entry.get():
-                    entry.insert(0, padded_placeholder)
-                    entry.config(foreground='grey')
+        def focus_out(_):
+            if not entry.get():
+                entry.insert(0, padded_placeholder)
+                entry.config(foreground='grey')
 
-            entry.bind('<FocusIn>', focus_in)
-            entry.bind('<FocusOut>', focus_out)
+        entry.bind('<FocusIn>', focus_in)
+        entry.bind('<FocusOut>', focus_out)
