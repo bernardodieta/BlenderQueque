@@ -100,7 +100,7 @@ class RenderQueueView:
         ttk.Label(self.settings_frame, text="Output Settings:", background=self.label_bg_color, foreground=self.label_fg_color, font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 5))
         ttk.Label(self.settings_frame, text="Render Settings:", background=self.label_bg_color, foreground=self.label_fg_color, font=("Arial", 10, "bold")).grid(row=5, column=0, columnspan=3, sticky="w", pady=(10, 5))
 
-    # Configuración de prefijo de nombre de archivo
+        # Configuración de prefijo de nombre de archivo
         tk.Label(self.settings_frame, text="File Name Prefix:", bg=self.label_bg_color, fg=self.label_fg_color).grid(row=1, column=0, sticky="w")
         self.file_prefix_var = tk.StringVar()
         self.file_prefix_entry = tk.Entry(self.settings_frame, textvariable=self.file_prefix_var, width=20, bg=self.entry_bg_color, fg=self.entry_fg_color)
@@ -161,6 +161,23 @@ class RenderQueueView:
         self.render_engine_dropdown = ttk.Combobox(self.settings_frame, textvariable=self.render_engine_var, state="readonly", width=17)
         self.render_engine_dropdown["values"] = ["CYCLES", "BLENDER_EEVEE", "BLENDER_WORKBENCH"]
         self.render_engine_dropdown.grid(row=8, column=1, sticky="ew", padx=(5, 0))
+
+        # Configuración de hilos de renderizado
+        tk.Label(self.settings_frame, text="Render Threads:", bg=self.label_bg_color, fg=self.label_fg_color).grid(row=9, column=0, sticky="w")
+        self.render_threads_var = tk.StringVar(value="Auto")
+        self.render_threads_entry = tk.Entry(self.settings_frame, textvariable=self.render_threads_var, width=20, bg=self.entry_bg_color, fg=self.entry_fg_color)
+        self.render_threads_entry.grid(row=9, column=1, sticky="ew", padx=(5, 0))
+        self.add_placeholder_to(self.render_threads_entry, "e.g., Auto, 4, 8")
+
+        # Checkbox para apagar la PC al finalizar
+        self.shutdown_var = tk.BooleanVar(value=False)
+        self.shutdown_check = tk.Checkbutton(self.settings_frame, text="Shutdown After Render", variable=self.shutdown_var, bg=self.label_bg_color, fg=self.label_fg_color, selectcolor=self.bg_color)
+        self.shutdown_check.grid(row=10, column=0, columnspan=2, sticky="w", pady=(10, 0))
+
+        # Checkbox para suspender la PC al finalizar
+        self.suspend_var = tk.BooleanVar(value=False)
+        self.suspend_check = tk.Checkbutton(self.settings_frame, text="Suspend After Render", variable=self.suspend_var, bg=self.label_bg_color, fg=self.label_fg_color, selectcolor=self.bg_color)
+        self.suspend_check.grid(row=11, column=0, columnspan=2, sticky="w")
 
         # Treeviews y la barra de desplazamiento
         treeviews_frame = tk.Frame(self.root, bg=self.bg_color)
@@ -244,13 +261,6 @@ class RenderQueueView:
         self.stop_button = tk.Button(self.root, text="Stop Render", command=self.stop_render, bg=self.button_bg_color, fg=self.button_fg_color)
         self.stop_button.grid(row=3, column=1, padx=10, pady=(0, 10))
 
-        # Botones para apagar/suspender la PC
-        self.shutdown_button = tk.Button(self.root, text="Apagar PC al Finalizar", command=self.set_shutdown_after_render, bg=self.button_bg_color, fg=self.button_fg_color)
-        self.shutdown_button.grid(row=4, column=0, padx=10, pady=(0, 10), sticky="ew")
-
-        self.suspend_button = tk.Button(self.root, text="Suspender PC al Finalizar", command=self.set_suspend_after_render, bg=self.button_bg_color, fg=self.button_fg_color)
-        self.suspend_button.grid(row=4, column=1, padx=10, pady=(0, 10), sticky="ew")
-
         # Configurar el redimensionamiento de las columnas
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=0)
@@ -327,7 +337,7 @@ class RenderQueueView:
             self.controller.remove_from_queue(index)
 
     def start_render(self):
-        print("Start Render button clicked")  # Mensaje de depuración
+        print("Start Render button clicked")
         if not self.controller.model.queue:
             messagebox.showerror("Error", "Queue is empty!")
             return
@@ -337,7 +347,7 @@ class RenderQueueView:
             for i, item in enumerate(self.controller.model.queue)
             if self.queue_tree.get_children()[i] in self.selected_items
         ]
-        print("Selected queue:", selected_queue)  # Mensaje de depuración
+        print("Selected queue:", selected_queue)
         if not selected_queue:
             messagebox.showerror("Error", "No items selected for rendering!")
             return
@@ -345,6 +355,7 @@ class RenderQueueView:
         self.controller.start_render(selected_queue)
 
     def stop_render(self):
+        print("Stop Render button clicked")
         self.controller.stop_render()
 
     def update_loaded_files_tree(self, loaded_files):
@@ -378,14 +389,13 @@ class RenderQueueView:
         for item_id in self.selected_items:
             if item_id in self.queue_tree.get_children():
                 self.queue_tree.item(item_id, tags=["selected"])
-            
+
     def update_progress_bar(self, index, progress):
-        # Actualiza la barra de progreso del ítem específico en la cola de renderizado
         item_id = self.queue_tree.get_children()[index]
         values = list(self.queue_tree.item(item_id, "values"))
         values[-1] = f"{progress}%"
-        self.queue_tree.item(item_id, values=values)    
-        
+        self.queue_tree.item(item_id, values=values)
+
     def update_settings_from_loaded_files(self, index):
         if index < len(self.controller.model.loaded_files):
             item = self.controller.model.loaded_files[index]
@@ -404,6 +414,10 @@ class RenderQueueView:
                 self.render_engine_var.set(item["render_engine"])
             else:
                 self.render_engine_var.set("CYCLES")
+            if "render_threads" in item:
+                self.render_threads_var.set(item["render_threads"])
+            else:
+                self.render_threads_var.set("Auto")
 
     def set_output_format(self, format):
         self.format_var.set(format)

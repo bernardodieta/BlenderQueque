@@ -17,7 +17,7 @@ class RenderQueueController:
                 messagebox.showerror("Error", f"No cameras found in {file_path}")
 
     def remove_file(self, index):
-      self.model.remove_file(index)
+        self.model.remove_file(index)
 
     def add_to_queue(self, index):
         settings = self.get_settings()
@@ -27,7 +27,7 @@ class RenderQueueController:
         self.model.remove_from_queue(index)
 
     def update_file_settings(self, index, settings):
-      self.model.update_file_settings(index, settings)
+        self.model.update_file_settings(index, settings)
 
     def get_settings(self):
         return {
@@ -38,25 +38,29 @@ class RenderQueueController:
             "format": self.view.format_var.get(),
             "output_path": self.view.output_path_var.get(),
             "file_prefix": self.view.file_prefix_var.get(),
-            "render_engine": self.view.render_engine_var.get()
+            "render_engine": self.view.render_engine_var.get(),
+            "render_threads": self.view.render_threads_var.get(),
+            "shutdown_after_render": self.view.shutdown_var.get(),  # Obtener estado de la casilla de verificación
+            "suspend_after_render": self.view.suspend_var.get(),  # Obtener estado de la casilla de verificación
         }
 
     def start_render(self, selected_queue):
-        print("Controller start_render called")  # Mensaje de depuración
+        print("Controller start_render called")
         self.model.start_render(selected_queue)
-        
+
     def stop_render(self):
+        print("Controller stop_render called")
         self.model.stop_render()
-        
+
     def set_shutdown_after_render(self):
-        self.model.shutdown_after_render = True
-        self.model.suspend_after_render = False
-        messagebox.showinfo("Apagado Automático", "La PC se apagará automáticamente cuando se completen los renders.")
+        self.model.shutdown_after_render = self.view.shutdown_var.get()
+        if self.model.shutdown_after_render:
+            messagebox.showinfo("Apagado Automático", "La PC se apagará automáticamente cuando se completen los renders.")
 
     def set_suspend_after_render(self):
-        self.model.shutdown_after_render = False
-        self.model.suspend_after_render = True
-        messagebox.showinfo("Suspensión Automática", "La PC se suspenderá automáticamente cuando se completen los renders.")
+        self.model.suspend_after_render = self.view.suspend_var.get()
+        if self.model.suspend_after_render:
+            messagebox.showinfo("Suspensión Automática", "La PC se suspenderá automáticamente cuando se completen los renders.")
 
     def update(self, model, event_type=None, data=None):
         if event_type == "error":
@@ -65,12 +69,8 @@ class RenderQueueController:
             messagebox.showinfo("Render Complete", data)
             self.view.progress['value'] = 0
         elif event_type == "progress_update":
-            # Actualizar la barra de progreso del ítem específico
             self.view.update_progress_bar(data, model.queue[data]["progress"])
-        elif event_type == "waiting_files_update":
-            messagebox.showinfo("Info", "Files added to the waiting list. They will be processed after the current render is finished.")
         else:
-            # Actualizar la vista
             self.view.update_loaded_files_tree(model.loaded_files)
             self.view.update_queue_tree(model.queue)
 

@@ -14,7 +14,6 @@ class RenderQueueModel:
         self.suspend_after_render = False
         self.stop_event = Event()
         self.current_process = None
-        self.waiting_files = []
 
     def add_observer(self, observer):
         self.observers.append(observer)
@@ -36,14 +35,11 @@ class RenderQueueModel:
             "output_path": default_output_path,
             "render_engine": "CYCLES",
             "file_prefix": "",
-            "progress": 0
+            "progress": 0,
+            "render_threads": "Auto",
         }
-        if self.is_rendering:
-            self.waiting_files.append(new_file)
-            self.notify_observers("waiting_files_update") 
-        else:
-            self.loaded_files.append(new_file)
-            self.notify_observers()
+        self.loaded_files.append(new_file)  # Agregar a loaded_files para la configuración
+        self.notify_observers()
 
     def remove_file(self, index):
         if index < len(self.loaded_files):
@@ -52,15 +48,17 @@ class RenderQueueModel:
 
     def add_to_queue(self, index, settings):
         if index < len(self.loaded_files):
-            file_data = self.loaded_files.pop(index)
+            file_data = self.loaded_files.pop(index)  # Mover de loaded_files a queue
             file_data.update(settings)
-            file_data["progress"] = 0  # Agregar un campo para el progreso
+            file_data["progress"] = 0
             self.queue.append(file_data)
             self.notify_observers()
 
     def remove_from_queue(self, index):
         if index < len(self.queue):
-            self.queue.pop(index)
+            # Restaurar el archivo a loaded_files cuando se elimina de la cola
+            file_data = self.queue.pop(index)
+            self.loaded_files.append(file_data)
             self.notify_observers()
 
     def update_file_settings(self, index, settings):
@@ -98,13 +96,14 @@ class RenderQueueModel:
             resolution = item["resolution"]
             format_type = item["format"]
             camera = item["selected_camera"]
-            start_frame = int(item["start_frame"]) # Convertir a entero
-            end_frame = int(item["end_frame"]) # Convertir a entero
+            start_frame = int(item["start_frame"])
+            end_frame = int(item["end_frame"])
             file_prefix = item.get("file_prefix", "")
             render_engine = item.get("render_engine", "CYCLES")
+            render_threads = item.get("render_threads", "Auto")
 
             output_dir = output_path.replace("\\", "/")
-            output_file = f"{output_dir}/{file_prefix}{index:04}.png"
+            output_file = f"{output_dir}/{file_prefix}{index:04}"
 
             command = [
                 "blender",
@@ -119,6 +118,7 @@ class RenderQueueModel:
                 render_engine,
                 str(start_frame),
                 str(end_frame),
+                render_threads,
             ]
 
             print(f"Running command: {' '.join(command)}")
@@ -126,7 +126,6 @@ class RenderQueueModel:
             try:
                 self.current_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, encoding="utf-8")
 
-                # Monitorear la salida de Blender para obtener el progreso
                 for line in iter(self.current_process.stdout.readline, ""):
                     if self.stop_event.is_set():
                         break
@@ -138,9 +137,8 @@ class RenderQueueModel:
                         progress = int((frame_done / total_frames) * 100)
                         print(f"Progress for {blend_file}: {progress}%")
 
-                        # Actualizar el progreso en la cola
                         item["progress"] = progress
-                        self.notify_observers("progress_update", index) # Notificar a los observers sobre la actualización del progreso, usando un tipo de evento
+                        self.notify_observers("progress_update", index)
 
                 for line in iter(self.current_process.stderr.readline, ""):
                     if self.stop_event.is_set():
@@ -166,14 +164,12 @@ class RenderQueueModel:
 
         self.is_rendering = False
         self.notify_observers("render_complete", "All renders have been processed.")
-        self.notify_observers()
-    def add_waiting_files_to_queue(self):
-        # Añade los archivos en espera a la cola principal y limpia la lista de espera
-        while self.waiting_files:
-            file_data = self.waiting_files.pop(0)
-            self.loaded_files.append(file_data)
-        self.notify_observers()
-        
+
+        if self.shutdown_after_render:
+            self.shutdown_pc()
+        if self.suspend_after_render:
+            self.suspend_pc()
+
     def shutdown_pc(self):
         os_name = platform.system()
         if os_name == "Windows":
