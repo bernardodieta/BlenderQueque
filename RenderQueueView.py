@@ -34,7 +34,8 @@ class RenderQueueView:
 
         # Configuración de estilos
         self.style = ttk.Style()
-        self.style.theme_use("default")
+        self.style = ttk.Style(root)
+        self.style.theme_use("clam")
 
         # Estilo para Treeview
         self.style.configure("Treeview",
@@ -58,6 +59,16 @@ class RenderQueueView:
         self.style.map("Treeview.Heading",
             background=[("active", self.treeview_header_bg_color)]
         )
+        # Estilo para botones redondeados sin borde
+        self.style.configure('TRounded.TButton',
+                             borderwidth=0,
+                             padding=6,
+                             relief="flat",
+                             background=self.button_bg_color,
+                             foreground=self.button_fg_color,
+                             font=('Arial', 10)) # Ajusta la fuente si es necesario
+        self.style.map('TRounded.TButton',
+                         background=[('active', '#5a5a5a')]) # Color al hacer clic
 
         # Estilo para Progressbar
         self.style.configure("Horizontal.TProgressbar",
@@ -92,96 +103,24 @@ class RenderQueueView:
         self.create_widgets()
 
     def create_widgets(self):
+        
+        # Frame para los botones Add y Remove
+        button_frame = tk.Frame(self.root, bg=self.bg_color)
+        button_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
+
+        self.add_button = ttk.Button(button_frame, text="Add .blend File", command=self.add_file, style='TRounded.TButton')
+        self.add_button.pack(side="left", padx=5)
+
+        self.remove_button = ttk.Button(button_frame, text="Remove Selected", command=self.remove_file, style='TRounded.TButton')
+        self.remove_button.pack(side="left", padx=5)
+
         # Frame para configuraciones
         self.settings_frame = tk.LabelFrame(self.root, text="Settings", padx=20, pady=20, bg=self.label_bg_color, fg=self.label_fg_color, bd=2, relief="groove")
-        self.settings_frame.grid(row=0, column=1, rowspan=2, padx=(0, 10), pady=10, sticky="nsew")
+        self.settings_frame.grid(row=0, column=1, rowspan=3, padx=(0, 10), pady=10, sticky="nsew")
 
-        # Etiquetas de grupo
-        ttk.Label(self.settings_frame, text="Output Settings:", background=self.label_bg_color, foreground=self.label_fg_color, font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 5))
-        ttk.Label(self.settings_frame, text="Render Settings:", background=self.label_bg_color, foreground=self.label_fg_color, font=("Arial", 10, "bold")).grid(row=5, column=0, columnspan=3, sticky="w", pady=(10, 5))
-
-        # Configuración de prefijo de nombre de archivo
-        tk.Label(self.settings_frame, text="File Name Prefix:", bg=self.label_bg_color, fg=self.label_fg_color).grid(row=1, column=0, sticky="w")
-        self.file_prefix_var = tk.StringVar()
-        self.file_prefix_entry = tk.Entry(self.settings_frame, textvariable=self.file_prefix_var, width=20, bg=self.entry_bg_color, fg=self.entry_fg_color)
-        self.file_prefix_entry.grid(row=1, column=1, sticky="ew", padx=(5, 0))
-        self.add_placeholder_to(self.file_prefix_entry, "e.g., MyProject_")
-
-        # Configuración de resolución
-        tk.Label(self.settings_frame, text="Resolution:", bg=self.label_bg_color, fg=self.label_fg_color).grid(row=2, column=0, sticky="w")
-        self.resolution_var = tk.StringVar(value="1920x1080")
-        self.resolution_entry = tk.Entry(self.settings_frame, textvariable=self.resolution_var, width=20, bg=self.entry_bg_color, fg=self.entry_fg_color)
-        self.resolution_entry.grid(row=2, column=1, sticky="ew", padx=(5, 0))
-        self.add_placeholder_to(self.resolution_entry, "e.g., 1920x1080")
-        
-        # Frame para los botones de formato
-        format_frame = tk.Frame(self.settings_frame, bg=self.label_bg_color)
-        format_frame.grid(row=3, column=1, sticky="ew", padx=(5, 0))
-        
-        # Botones para seleccionar el formato
-        self.format_var = tk.StringVar(value="PNG")
-
-        tk.Button(format_frame, text="PNG", command=lambda: self.set_output_format("PNG"), bg=self.button_bg_color, fg=self.button_fg_color).pack(side="left", padx=2)
-        tk.Button(format_frame, text="JPG", command=lambda: self.set_output_format("JPEG"), bg=self.button_bg_color, fg=self.button_fg_color).pack(side="left", padx=2)
-        tk.Button(format_frame, text="TIFF", command=lambda: self.set_output_format("TIFF"), bg=self.button_bg_color, fg=self.button_fg_color).pack(side="left", padx=2)
-        tk.Button(format_frame, text="SVG", command=lambda: self.set_output_format("SVG"), bg=self.button_bg_color, fg=self.button_fg_color).pack(side="left", padx=2)
-            
-        # Configuración de ruta de salida
-        tk.Label(self.settings_frame, text="Output Path:", bg=self.label_bg_color, fg=self.label_fg_color).grid(row=4, column=0, sticky="w")
-        self.output_path_var = tk.StringVar()
-        self.output_path_entry = tk.Entry(self.settings_frame, textvariable=self.output_path_var, width=20, bg=self.entry_bg_color, fg=self.entry_fg_color)
-        self.output_path_entry.grid(row=4, column=1, sticky="ew", padx=(5, 0))
-        self.add_placeholder_to(self.output_path_entry, "e.g., /path/to/output")
-
-        self.output_path_button = tk.Button(self.settings_frame, text="Browse", command=self.browse_output_path, bg=self.button_bg_color, fg=self.button_fg_color)
-        self.output_path_button.grid(row=4, column=2, sticky="ew", padx=(5, 0))
-        
-            # Configuración de cámara y rango de frames
-        self.camera_label = tk.Label(self.settings_frame, text="Camera:", bg=self.label_bg_color, fg=self.label_fg_color)
-        self.camera_label.grid(row=6, column=0, sticky="w")
-        self.camera_var = tk.StringVar()
-        self.camera_dropdown = ttk.Combobox(self.settings_frame, textvariable=self.camera_var, state="readonly", width=17)
-        self.camera_dropdown.grid(row=6, column=1, sticky="ew", padx=(5, 0))
-
-        self.frame_range_label = tk.Label(self.settings_frame, text="Frame Range:", bg=self.label_bg_color, fg=self.label_fg_color)
-        self.frame_range_label.grid(row=7, column=0, sticky="w")
-        self.frame_start_var = tk.IntVar(value=1)
-        self.frame_end_var = tk.IntVar(value=250)
-        self.frame_start_entry = tk.Entry(self.settings_frame, textvariable=self.frame_start_var, width=20, bg=self.entry_bg_color, fg=self.entry_fg_color)
-        self.frame_start_entry.grid(row=7, column=1, sticky="ew", padx=(5, 0))
-        self.add_placeholder_to(self.frame_start_entry, "Start")
-
-        self.frame_end_entry = tk.Entry(self.settings_frame, textvariable=self.frame_end_var, width=20, bg=self.entry_bg_color, fg=self.entry_fg_color)
-        self.frame_end_entry.grid(row=7, column=2, sticky="ew")
-        self.add_placeholder_to(self.frame_end_entry, "End")
-
-        # Configuración de motor de render
-        tk.Label(self.settings_frame, text="Render Engine:", bg=self.label_bg_color, fg=self.label_fg_color).grid(row=8, column=0, sticky="w")
-        self.render_engine_var = tk.StringVar(value="CYCLES")
-        self.render_engine_dropdown = ttk.Combobox(self.settings_frame, textvariable=self.render_engine_var, state="readonly", width=17)
-        self.render_engine_dropdown["values"] = ["CYCLES", "BLENDER_EEVEE", "BLENDER_WORKBENCH"]
-        self.render_engine_dropdown.grid(row=8, column=1, sticky="ew", padx=(5, 0))
-
-        # Configuración de hilos de renderizado
-        tk.Label(self.settings_frame, text="Render Threads:", bg=self.label_bg_color, fg=self.label_fg_color).grid(row=9, column=0, sticky="w")
-        self.render_threads_var = tk.StringVar(value="Auto")
-        self.render_threads_entry = tk.Entry(self.settings_frame, textvariable=self.render_threads_var, width=20, bg=self.entry_bg_color, fg=self.entry_fg_color)
-        self.render_threads_entry.grid(row=9, column=1, sticky="ew", padx=(5, 0))
-        self.add_placeholder_to(self.render_threads_entry, "e.g., Auto, 4, 8")
-
-        # Checkbox para apagar la PC al finalizar
-        self.shutdown_var = tk.BooleanVar(value=False)
-        self.shutdown_check = tk.Checkbutton(self.settings_frame, text="Shutdown After Render", variable=self.shutdown_var, bg=self.label_bg_color, fg=self.label_fg_color, selectcolor=self.bg_color)
-        self.shutdown_check.grid(row=10, column=0, columnspan=2, sticky="w", pady=(10, 0))
-
-        # Checkbox para suspender la PC al finalizar
-        self.suspend_var = tk.BooleanVar(value=False)
-        self.suspend_check = tk.Checkbutton(self.settings_frame, text="Suspend After Render", variable=self.suspend_var, bg=self.label_bg_color, fg=self.label_fg_color, selectcolor=self.bg_color)
-        self.suspend_check.grid(row=11, column=0, columnspan=2, sticky="w")
-
-        # Treeviews y la barra de desplazamiento
+        # Frame para los Treeviews
         treeviews_frame = tk.Frame(self.root, bg=self.bg_color)
-        treeviews_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        treeviews_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
 
         # Treeview para archivos cargados
         self.loaded_files_tree = ttk.Treeview(treeviews_frame, columns=("File"), show="headings")
@@ -233,43 +172,139 @@ class RenderQueueView:
         treeviews_frame.grid_rowconfigure(1, weight=1)
         treeviews_frame.grid_columnconfigure(0, weight=1)
 
-        # Frame para los botones
-        button_frame = tk.Frame(self.root, bg=self.bg_color)
-        button_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
+        # Frame para los botones de la cola
+        queue_button_frame = tk.Frame(self.root, bg=self.bg_color)
+        queue_button_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 10))
 
-        # Botones
-        self.add_button = tk.Button(button_frame, text="Add .blend File", command=self.add_file, bg=self.button_bg_color, fg=self.button_fg_color)
-        self.add_button.pack(side="left", padx=5)
-
-        self.remove_button = tk.Button(button_frame, text="Remove Selected", command=self.remove_file, bg=self.button_bg_color, fg=self.button_fg_color)
-        self.remove_button.pack(side="left", padx=5)
-
-        self.add_to_queue_button = tk.Button(button_frame, text="Add to Queue", command=self.add_to_render_queue, bg=self.button_bg_color, fg=self.button_fg_color)
+        self.add_to_queue_button = ttk.Button(queue_button_frame, text="Add to Queue", command=self.add_to_render_queue, style='TRounded.TButton')
         self.add_to_queue_button.pack(side="left", padx=5)
 
-        self.remove_from_queue_button = tk.Button(button_frame, text="Remove from Queue", command=self.remove_from_render_queue, bg=self.button_bg_color, fg=self.button_fg_color)
+        self.remove_from_queue_button = ttk.Button(queue_button_frame, text="Remove from Queue", command=self.remove_from_render_queue, style='TRounded.TButton')
         self.remove_from_queue_button.pack(side="left", padx=5)
 
-        # Barra de progreso
-        self.progress = ttk.Progressbar(self.root, orient=tk.HORIZONTAL, length=200, mode='determinate', style="Horizontal.TProgressbar")
-        self.progress.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="ew")
-
         # Botones para iniciar y detener renderizado
-        self.start_button = tk.Button(self.root, text="Start Render", command=self.start_render, bg=self.button_bg_color, fg=self.button_fg_color)
-        self.start_button.grid(row=2, column=1, padx=10, pady=(0, 10))
+        self.start_button = ttk.Button(self.root, text="Start Render", command=self.start_render, style='TRounded.TButton')
+        self.start_button.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="ew")
 
-        self.stop_button = tk.Button(self.root, text="Stop Render", command=self.stop_render, bg=self.button_bg_color, fg=self.button_fg_color)
-        self.stop_button.grid(row=3, column=1, padx=10, pady=(0, 10))
+        self.stop_button = ttk.Button(self.root, text="Stop Render", command=self.stop_render, style='TRounded.TButton')
+        self.stop_button.grid(row=4, column=0, padx=10, pady=(0, 10), sticky="ew")
+
+        # Configuraciones
+        self.create_settings_entries()
 
         # Configurar el redimensionamiento de las columnas
-        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_rowconfigure(0, weight=0)
         self.root.grid_rowconfigure(1, weight=0)
+        self.root.grid_rowconfigure(2, weight=0)
+        self.root.grid_rowconfigure(3, weight=0)
+        self.root.grid_rowconfigure(4, weight=0)
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
 
+    def create_settings_entries(self):
+        # Etiquetas de grupo
+        ttk.Label(self.settings_frame, text="Output Settings:", background=self.label_bg_color, foreground=self.label_fg_color, font=("Arial", 14, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
+        ttk.Label(self.settings_frame, text="Render Settings:", background=self.label_bg_color, foreground=self.label_fg_color, font=("Arial", 14, "bold")).grid(row=7, column=0, columnspan=2, sticky="w", pady=(10, 5))
+
+        # Campos de entrada
+        self.file_prefix_var = tk.StringVar()
+        self.resolution_var = tk.StringVar(value="1920x1080")
+        self.format_var = tk.StringVar(value="PNG")
+        self.output_path_var = tk.StringVar()
+        self.camera_var = tk.StringVar()
+        self.frame_start_var = tk.IntVar(value=1)
+        self.frame_end_var = tk.IntVar(value=250)
+        self.render_engine_var = tk.StringVar(value="CYCLES")
+        self.render_threads_var = tk.StringVar(value="Auto")
+
+        current_row = 1  # Empezamos en la fila 1 después del título "Output Settings"
+        self.create_setting_entry("File Name Prefix:", self.file_prefix_var, current_row)
+        current_row += 1
+        self.create_setting_entry("Resolution:", self.resolution_var, current_row)
+        current_row += 1
+        self.create_output_format_buttons(row=current_row)  # La fila para los botones de formato
+        current_row += 1
+        self.create_setting_entry("Output Path:", self.output_path_var, current_row)
+        current_row += 1
+        self.output_path_button = tk.Button(self.settings_frame, text="Browse", command=self.browse_output_path, bg=self.button_bg_color, fg=self.button_fg_color)
+        self.output_path_button.grid(row=current_row + 1, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 5)) # Lo dejamos en la siguiente fila abarcando ambas columnas
+        current_row += 2 # Incrementamos para el siguiente grupo de configuraciones
+
+        current_row = 8 # Empezamos en la fila 8 después del título "Render Settings"
+        self.create_setting_entry("Camera:", self.camera_var, current_row)
+        current_row += 1
+        self.create_setting_entry("Start Frame:", self.frame_start_var, current_row, entry_type="int")
+        current_row += 1
+        self.create_setting_entry("End Frame:", self.frame_end_var, current_row, entry_type="int")
+        current_row += 1
+        self.create_setting_entry("Render Engine:", self.render_engine_var, current_row)
+        current_row += 1
+        self.create_setting_entry("Render Threads:", self.render_threads_var, current_row)
+        current_row += 1
+
+        # Checkbox para apagar la PC al finalizar
+        self.shutdown_var = tk.BooleanVar(value=False)
+        self.shutdown_check = tk.Checkbutton(self.settings_frame, text="Shutdown After Render", variable=self.shutdown_var, bg=self.label_bg_color, fg=self.label_fg_color, selectcolor=self.bg_color)
+        self.shutdown_check.grid(row=current_row + 1, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        current_row += 1
+
+        # Checkbox para suspender la PC al finalizar
+        self.suspend_var = tk.BooleanVar(value=False)
+        self.suspend_check = tk.Checkbutton(self.settings_frame, text="Suspend After Render", variable=self.suspend_var, bg=self.label_bg_color, fg=self.label_fg_color, selectcolor=self.bg_color)
+        self.suspend_check.grid(row=current_row + 1, column=0, columnspan=2, sticky="w")
+
+    def create_output_format_buttons(self, row):
+      # Frame para los botones de formato
+      format_frame = tk.Frame(self.settings_frame, bg=self.label_bg_color)
+      format_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 5))
+
+      # Botones para seleccionar el formato
+      tk.Button(format_frame, text="PNG", command=lambda: self.set_output_format("PNG"), bg=self.button_bg_color, fg=self.button_fg_color).pack(side="left", padx=2)
+      tk.Button(format_frame, text="JPG", command=lambda: self.set_output_format("JPEG"), bg=self.button_bg_color, fg=self.button_fg_color).pack(side="left", padx=2)
+      tk.Button(format_frame, text="TIFF", command=lambda: self.set_output_format("TIFF"), bg=self.button_bg_color, fg=self.button_fg_color).pack(side="left", padx=2)
+      tk.Button(format_frame, text="SVG", command=lambda: self.set_output_format("SVG"), bg=self.button_bg_color, fg=self.button_fg_color).pack(side="left", padx=2)
+
+
+    def create_setting_entry(self, label_text, variable, row, entry_type="text"):
+        # Crear etiqueta en la fila actual, columna 0
+        tk.Label(self.settings_frame, text=label_text, bg=self.label_bg_color, fg=self.label_fg_color).grid(row=row, column=0, sticky="w", padx=5, pady=(10, 5)) # Ajustamos el pady
+
+        # Crear y posicionar el campo de entrada en la misma fila, columna 1
+        entry_font = ("Arial", 10)  # Puedes ajustar el tamaño de la fuente aquí
+        entry_pady = 5  # Ajustamos el padding vertical del entry
+
+        if entry_type == "int":
+            entry = tk.Entry(self.settings_frame, textvariable=variable, width=25, bg=self.entry_bg_color, fg=self.entry_fg_color, font=entry_font)
+        elif label_text == "Camera:":
+            self.camera_dropdown = ttk.Combobox(self.settings_frame, textvariable=variable, state="readonly", width=27, font=entry_font)
+            entry = self.camera_dropdown
+        elif label_text == "Render Engine:":
+            self.render_engine_dropdown = ttk.Combobox(self.settings_frame, textvariable=self.render_engine_var, state="readonly", width=27, font=entry_font)
+            self.render_engine_dropdown["values"] = ["CYCLES", "BLENDER_EEVEE", "BLENDER_WORKBENCH"]
+            entry = self.render_engine_dropdown
+        else:
+            entry = tk.Entry(self.settings_frame, textvariable=variable, width=25, bg=self.entry_bg_color, fg=self.entry_fg_color, font=entry_font)
+
+        entry.grid(row=row, column=1, sticky="ew", padx=5, pady=entry_pady) # Ajustamos el pady del entry
+
+        if entry_type == "text":
+            if label_text == "Resolution:":
+                self.add_placeholder_to(entry, "e.g., 1920x1080")
+            elif label_text == "Output Path:":
+                self.add_placeholder_to(entry, "e.g., /path/to/output")
+            elif label_text == "File Name Prefix:":
+                self.add_placeholder_to(entry, "e.g., MyProject_")
+        elif entry_type == "int":
+            if label_text == "Start Frame:":
+                self.add_placeholder_to(entry, "Start")
+            elif label_text == "End Frame:":
+                self.add_placeholder_to(entry, "End")
+        elif label_text == "Render Threads:":
+            self.add_placeholder_to(entry, "e.g., Auto, 4, 8")
+
     def add_file(self):
         self.controller.add_file_dialog()
-        
+
     def remove_file(self):
         selected_items = list(self.selected_loaded_files)
         for item_id in selected_items:
@@ -277,7 +312,7 @@ class RenderQueueView:
             self.controller.remove_file(index)
             self.loaded_files_tree.delete(item_id)
             self.selected_loaded_files.remove(item_id)
-            
+
     def on_loaded_files_tree_click(self, event):
         region = self.loaded_files_tree.identify_region(event.x, event.y)
         if region == "cell":
@@ -442,18 +477,19 @@ class RenderQueueView:
             self.update_settings_from_loaded_files(index)
 
     def add_placeholder_to(self, entry, placeholder):
-        entry.insert(0, placeholder)
-        entry.config(foreground='grey')
+            padded_placeholder = "  " + placeholder + "  "  # Añadimos dos espacios a cada lado
+            entry.insert(0, padded_placeholder)
+            entry.config(foreground='grey')
 
-        def focus_in(_):
-            if entry.get() == placeholder:
-                entry.delete(0, tk.END)
-                entry.config(foreground=self.entry_fg_color)
+            def focus_in(_):
+                if entry.get() == padded_placeholder:
+                    entry.delete(0, tk.END)
+                    entry.config(foreground=self.entry_fg_color)
 
-        def focus_out(_):
-            if not entry.get():
-                entry.insert(0, placeholder)
-                entry.config(foreground='grey')
+            def focus_out(_):
+                if not entry.get():
+                    entry.insert(0, padded_placeholder)
+                    entry.config(foreground='grey')
 
-        entry.bind('<FocusIn>', focus_in)
-        entry.bind('<FocusOut>', focus_out)
+            entry.bind('<FocusIn>', focus_in)
+            entry.bind('<FocusOut>', focus_out)
