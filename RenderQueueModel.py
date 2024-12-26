@@ -3,7 +3,10 @@ import subprocess
 import platform
 import re
 from threading import Thread, Event
-import json # Importar json
+import json
+import datetime
+import smtplib
+from email.mime.text import MIMEText
 
 class RenderQueueModel:
     def __init__(self):
@@ -15,6 +18,7 @@ class RenderQueueModel:
         self.suspend_after_render = False
         self.stop_event = Event()
         self.current_process = None
+        self.use_custom_alerts = False
 
     def add_observer(self, observer):
         self.observers.append(observer)
@@ -34,12 +38,14 @@ class RenderQueueModel:
             "resolution": "1920x1080",
             "format": "PNG",
             "output_path": default_output_path,
+            "output_format": "",
             "render_engine": "CYCLES",
             "file_prefix": "",
             "progress": 0,
             "render_threads": "Auto",
+            "output_file_name": "",
         }
-        self.loaded_files.append(new_file)  # Agregar a loaded_files para la configuración
+        self.loaded_files.append(new_file)
         self.notify_observers()
 
     def remove_file(self, index):
@@ -49,7 +55,7 @@ class RenderQueueModel:
 
     def add_to_queue(self, index, settings):
         if index < len(self.loaded_files):
-            file_data = self.loaded_files.pop(index)  # Mover de loaded_files a queue
+            file_data = self.loaded_files.pop(index)
             file_data.update(settings)
             file_data["progress"] = 0
             self.queue.append(file_data)
@@ -57,7 +63,6 @@ class RenderQueueModel:
 
     def remove_from_queue(self, index):
         if index < len(self.queue):
-            # Restaurar el archivo a loaded_files cuando se elimina de la cola
             file_data = self.queue.pop(index)
             self.loaded_files.append(file_data)
             self.notify_observers()
@@ -67,11 +72,11 @@ class RenderQueueModel:
             self.loaded_files[index].update(settings)
             self.notify_observers()
 
-    def start_render(self, selected_queue):
+    def start_render(self, selected_queue, progress_bar):  # <--- Recibe progress_bar
         print("Model start_render called")
         self.is_rendering = True
         self.stop_event.clear()
-        render_thread = Thread(target=self.process_queue, args=(selected_queue,))
+        render_thread = Thread(target=self.process_queue, args=(selected_queue, progress_bar))  # <--- Pasa progress_bar
         render_thread.start()
 
     def stop_render(self):
@@ -83,8 +88,24 @@ class RenderQueueModel:
                 print("Terminating current Blender process")
                 self.current_process.terminate()
 
-    def process_queue(self, queue_to_render):
+    def process_queue(self, queue_to_render, progress_bar):
         print("process_queue started")
+        total_frames_to_render = sum((int(item["end_frame"]) - int(item["start_frame"]) + 1) for item in queue_to_render)
+        total_frames_rendered = 0
+
+        # Inicializar variables fuera del bucle
+        blend_file = None
+        output_path = None
+        resolution = None
+        format_type = None
+        camera = None
+        start_frame = None
+        end_frame = None
+        file_prefix = None
+        render_engine = None
+        render_threads = None
+        output_file_name = None
+
         for index, item in enumerate(queue_to_render):
             if self.stop_event.is_set():
                 print("Rendering stopped by user")
@@ -92,6 +113,7 @@ class RenderQueueModel:
 
             print(f"Processing item: {item}")
 
+            # Asignar valores a las variables solo si no se ha detenido el renderizado
             blend_file = item["file"]
             output_path = item["output_path"]
             resolution = item["resolution"]
@@ -102,9 +124,17 @@ class RenderQueueModel:
             file_prefix = item.get("file_prefix", "")
             render_engine = item.get("render_engine", "CYCLES")
             render_threads = item.get("render_threads", "Auto")
+            output_file_name = item.get("output_file_name", "")
 
             output_dir = output_path.replace("\\", "/")
-            output_file = f"{output_dir}/{file_prefix}{index:04}"
+            output_file = f"{output_dir}/{file_prefix}{index:04}.{format_type.lower()}"
+            
+            if output_file_name:
+                base_name, _ = os.path.splitext(output_file_name)
+                output_file = f"{output_dir}/{base_name}"
+            else:
+                # Si no, usar el prefijo
+                output_file = f"{output_dir}/{file_prefix}"
 
             command = [
                 "blender",
@@ -114,14 +144,14 @@ class RenderQueueModel:
                 "script_blender.py",
                 "--",
                 blend_file,
-                output_file,
+                output_file,  # Ahora output_file es la ruta base sin el número de frame NI la extensión
                 camera,
                 render_engine,
                 str(start_frame),
                 str(end_frame),
                 render_threads,
+                format_type,
             ]
-
             print(f"Running command: {' '.join(command)}")
 
             try:
@@ -134,11 +164,18 @@ class RenderQueueModel:
                     match = re.search(r"Fra:(\d+), Mem:.*, Time:(.*), (.*)", line)
                     if match:
                         frame_done = int(match.group(1))
-                        total_frames = end_frame - start_frame + 1
-                        progress = int((frame_done / total_frames) * 100)
-                        print(f"Progress for {blend_file}: {progress}%")
+                        frames_in_current_item = int(item["end_frame"]) - int(item["start_frame"]) + 1
+                        progress_current_item = int((frame_done / frames_in_current_item) * 100)
 
-                        item["progress"] = progress
+                        item["progress"] = progress_current_item
+
+                        # Calcular progreso global
+                        total_frames_rendered_temp = total_frames_rendered + frame_done
+                        global_progress = int((total_frames_rendered_temp / total_frames_to_render) * 100)
+
+                        # Actualizar barra de progreso
+                        progress_bar["value"] = global_progress
+
                         self.notify_observers("progress_update", index)
 
                 for line in iter(self.current_process.stderr.readline, ""):
@@ -158,15 +195,22 @@ class RenderQueueModel:
                     return
 
                 self.current_process = None
+                self.notify_observers("render_complete_item", f"Rendering {blend_file} has been completed")
+
+                # Actualizar el conteo de frames renderizados después de completar cada item
+                total_frames_rendered += int(item["end_frame"]) - int(item["start_frame"]) + 1
 
             except FileNotFoundError:
-                self.notify_observers("error", f"Blender executable not found. Please make sure Blender is installed and accessible in your system path.")
+                self.notify_observers(
+                    "error",
+                    f"Blender executable not found. Please make sure Blender is installed and accessible in your system path."
+                )
             except subprocess.CalledProcessError as e:
-                 if self.stop_event.is_set():
-                      print("Rendering stopped by user during an error")
-                      self.notify_observers("error", f"Rendering stopped by user during an error: {e.stderr}")
-                      return
-                 self.notify_observers("error", f"Error rendering {blend_file}:\n{e.stderr}")
+                if self.stop_event.is_set():
+                    print("Rendering stopped by user during an error")
+                    self.notify_observers("error", f"Rendering stopped by user during an error: {e.stderr}")
+                    return
+                self.notify_observers("error", f"Error rendering {blend_file}:\n{e.stderr}")
             except Exception as e:
                 self.notify_observers("error", f"An unexpected error occurred: {e}")
                 return
@@ -244,14 +288,64 @@ class RenderQueueModel:
             "queue": self.queue,
             "shutdown_after_render": self.shutdown_after_render,
             "suspend_after_render": self.suspend_after_render,
+            "use_custom_alerts": self.use_custom_alerts,
         }
 
     @classmethod
     def from_dict(cls, data):
-         model = cls()
-         model.loaded_files = data.get("loaded_files", [])
-         model.queue = data.get("queue", [])
-         model.shutdown_after_render = data.get("shutdown_after_render", False)
-         model.suspend_after_render = data.get("suspend_after_render", False)
-         model.notify_observers()
-         return model
+        model = cls()
+        model.loaded_files = data.get("loaded_files", [])
+        model.queue = data.get("queue", [])
+        model.shutdown_after_render = data.get("shutdown_after_render", False)
+        model.suspend_after_render = data.get("suspend_after_render", False)
+        model.use_custom_alerts = data.get("use_custom_alerts", False)
+        model.notify_observers()
+        return model
+
+    def sort_queue(self, sort_by):
+        if sort_by == "File Name":
+            self.queue.sort(key=lambda item: os.path.basename(item["file"]))
+        elif sort_by == "Start Frame":
+            self.queue.sort(key=lambda item: item["start_frame"])
+        elif sort_by == "End Frame":
+            self.queue.sort(key=lambda item: item["end_frame"])
+        elif sort_by == "Output Path":
+            self.queue.sort(key=lambda item: item["output_path"])
+        elif sort_by == "Camera":
+            self.queue.sort(key=lambda item: item["selected_camera"])
+        elif sort_by == "Format":
+            self.queue.sort(key=lambda item: item["format"])
+        elif sort_by == "Resolution":
+            self.queue.sort(key=lambda item: item["resolution"])
+        self.notify_observers()
+
+    def filter_loaded_files(self, filter_text):
+        if not filter_text:
+            return self.loaded_files
+        filter_text = filter_text.lower()
+        return [
+            file
+            for file in self.loaded_files
+            if filter_text in os.path.basename(file["file"]).lower()
+        ]
+
+    def send_alerts(self):
+        print("Sending alerts...")
+
+        if True:
+            sender_email = "your_email@example.com"
+            sender_password = "your_password"
+            receiver_email = "receiver_email@example.com"
+
+            message = MIMEText("The rendering is done!")
+            message["Subject"] = "Render Complete"
+            message["From"] = sender_email
+            message["To"] = receiver_email
+
+            try:
+                with smtplib.SMTP_SSL("smtp.example.com", 465) as server:
+                    server.login(sender_email, sender_password)
+                    server.send_message(message)
+                    print("Alerta de correo enviada correctamente")
+            except Exception as e:
+                print(f"Error sending email alert: {e}")
